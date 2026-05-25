@@ -155,15 +155,22 @@ public class CDUBlock extends BaseEntityBlock {
         if (entity instanceof CDUBlockEntity blockEntity){
             ItemStack item = player.getItemInHand(hand);
             if (item.getItem() == Sitems.ICE_CANISTER.get()){
-                if (blockEntity.getFuel() > 0){
-                    player.displayClientMessage(Component.literal("Current fuel " + blockEntity.getFuel() + "/" + blockEntity.maxFuel),true);
-                }else{
-                    level.playLocalSound(pos, Ssounds.CDU_INSERT.get(), SoundSource.BLOCKS,2f,2f,true);
-                    level.playLocalSound(pos, Ssounds.CDU_AMBIENT.get(), SoundSource.BLOCKS,1f,1f,true);
-                    blockEntity.setFuel(blockEntity.maxFuel);
-                    item.shrink(1);
+
+                ItemStack remaining = blockEntity.getItemHandler().insertItem(0, item.copy(), false);
+
+                if (remaining.getCount() < item.getCount()) {
+                    // Канистра была принята (частично или полностью)
+                    if (!level.isClientSide) {
+                        level.playLocalSound(pos, Ssounds.CDU_INSERT.get(), SoundSource.BLOCKS, 2f, 2f, true);
+                        level.playLocalSound(pos, Ssounds.CDU_AMBIENT.get(), SoundSource.BLOCKS, 1f, 1f, true);
+                    }
+                    item.shrink(1); // Убираем одну канистру из руки игрока
+                    return InteractionResult.SUCCESS;
+                } else {
+                    // Слот не принял канистру (топливо полно + слот занят)
+                    player.displayClientMessage(Component.literal("Current fuel " + blockEntity.getFuel() + "/" + blockEntity.maxFuel), true);
+                    return InteractionResult.SUCCESS;
                 }
-                return InteractionResult.SUCCESS;
             }
             if (player.isShiftKeyDown() && player instanceof ServerPlayer serverPlayer && !level.isClientSide){
                 NetworkHooks.openScreen(serverPlayer, blockEntity, pos);

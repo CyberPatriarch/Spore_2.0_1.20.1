@@ -9,6 +9,7 @@ import com.Harbinger.Spore.Sentities.Utility.InfectionTendril;
 import com.Harbinger.Spore.Sentities.Utility.ScentEntity;
 import com.Harbinger.Spore.Spore;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
@@ -39,6 +40,11 @@ import net.minecraft.world.level.block.state.properties.Property;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.registries.ForgeRegistries;
+import net.minecraftforge.common.capabilities.Capability;
+import net.minecraftforge.common.capabilities.ForgeCapabilities;
+import net.minecraftforge.common.util.LazyOptional;
+import net.minecraftforge.items.ItemStackHandler;
+import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -52,6 +58,21 @@ public class CDUBlockEntity extends BlockEntity implements MenuProvider,Animated
     private final List<StoreDouble> blockMap;
     private final int side;
     private int ticks;
+
+    private final ItemStackHandler itemHandler = new ItemStackHandler(1) {
+        @Override
+        public boolean isItemValid(int slot, @NotNull ItemStack stack) {
+            return stack.getItem() == Sitems.ICE_CANISTER.get();
+        }
+
+        @Override
+        protected void onContentsChanged(int slot) {
+            setChanged();
+            if (level != null && !level.isClientSide) {
+                level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 3);
+            }
+        }
+    };
 
     public CDUBlockEntity(BlockPos pos, BlockState state) {
         super(SblockEntities.CDU.get(), pos, state);
@@ -225,6 +246,14 @@ public class CDUBlockEntity extends BlockEntity implements MenuProvider,Animated
     }
     public static <E extends BlockEntity> void serverTick(Level level, BlockPos blockPos, BlockState blockState, CDUBlockEntity e) {
         if (CDUBlock.isCDUUsable(blockPos,e.level)){
+
+            if (e.fuel <= 0 && !e.itemHandler.getStackInSlot(0).isEmpty()) {
+                e.itemHandler.extractItem(0, 1, false);
+                e.fuel = e.maxFuel;
+                level.sendBlockUpdated(blockPos, blockState, blockState, 3);
+                setChanged(level, blockPos, blockState);
+            }
+
             if (e.getFuel() > 0 && !level.isClientSide){
                 e.fuel--;
                 if (e.getFuel() % 200 == 0){
@@ -237,6 +266,22 @@ public class CDUBlockEntity extends BlockEntity implements MenuProvider,Animated
         }
     }
 
+    public @NotNull <T> LazyOptional getCapability(@NotNull Capability<T> cap, @Nullable Direction side) {
+        if (cap == ForgeCapabilities.ITEM_HANDLER) {
+            return LazyOptional.of(() -> itemHandler).cast();
+        }
+        return super.getCapability(cap, side);
+    }
+
+    @Override
+    public void invalidateCaps() {
+        super.invalidateCaps();
+    }
+
+    protected static void setChanged(Level level, BlockPos pos, BlockState state) {
+        level.blockEntityChanged(pos);
+    }
+
     @Override
     public Component getDisplayName() {
         return Component.translatable("block.spore.cdu");
@@ -245,5 +290,9 @@ public class CDUBlockEntity extends BlockEntity implements MenuProvider,Animated
     @Override
     public @Nullable AbstractContainerMenu createMenu(int i, Inventory inventory, Player player) {
         return new CDUMenu(i,inventory);
+    }
+
+    public ItemStackHandler getItemHandler() {
+        return itemHandler;
     }
 }
